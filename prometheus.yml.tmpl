@@ -4,7 +4,7 @@
   {{- $normalize_dots := replace $normalize_slash "." "_" -1 -}}
   {{- $normalize_hyphen := replace $normalize_dots "-" "_" -1 -}}
   {{- $normalized_label := $normalize_hyphen -}}
-  {{ $normalized_label }}: '{{ .Value - }}'
+  {{ $normalized_label }}: '{{ .Value }}'
 {{- end -}}
 
 global:
@@ -40,25 +40,34 @@ scrape_configs:
     {{- if eq "service" (getv (printf "/stacks/%s/services/%s/kind" $stack_name $service)) }}
       {{- range $container := lsdir (printf "/stacks/%s/services/%s/containers/" $stack_name $service) -}}
         {{- $host_uuid := getv (printf "/containers/%s/host_uuid" $container) }}
+
     - targets:
       - '{{ $container }}.rancher.internal:{{ $port }}'
+        {{- if eq "cadvisor" (getv (printf "/stacks/%s/services/%s/labels/prometheus.metric_relabel_pattern" $stack_name $service)) }}
+      metric_relabel_configs:
+      - source_labels: ['container_label_io_rancher_project_service_name']
+        regex: '^(.+)/'
+        target_label: 'stack_name'
+        replacement: '$1'
+
+      - source_labels: ['container_label_io_rancher_project_service_name']
+        regex: '/(.+)$'
+        target_label: 'service_name'
+        replacement: '$1'
+
+      - source_labels: ['container_label_io_rancher_project_service_name']
+        regex: '/(.+)$'
+        target_label: 'container_id'
+        replacement: '$1'
+        {{- else }}
       labels:
-        environment: '{{ getv ( printf "/stacks/%s/environment_name" $stack_name ) }}'
-        stack: '{{ $stack_name }}'
-        service: '{{ $service }}'
-        container_id: '{{ $container }}'
-
-        {{- range $name := ls "/hosts/" -}}
-        {{- if eq $host_uuid (getv ( printf "/hosts/%s/uuid" . )) }}
-        host: '{{ $name }}'
-        {{- range gets (printf "/hosts/%s/labels/*" $name) }}
-        {{ template "normalize" . }}
+        stack_name: '{{ $stack_name }}'
+        service_name: '{{ $service }}'
+        container_id: '{{ getv (printf "/containers/%s/external_id" $container) }}'
         {{- end }}
-        {{- end }}
-        {{- end }}
-
       {{- end }}
     {{- end }}
+
 
         {{- end -}}
     {{- end }}
