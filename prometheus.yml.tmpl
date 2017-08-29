@@ -1,12 +1,3 @@
-{{- define "normalize" -}}
-  {{- $raw_label := .Key -}}
-  {{- $normalize_slash := index (split $raw_label "/") 4 -}}
-  {{- $normalize_dots := replace $normalize_slash "." "_" -1 -}}
-  {{- $normalize_hyphen := replace $normalize_dots "-" "_" -1 -}}
-  {{- $normalized_label := $normalize_hyphen -}}
-  {{ $normalized_label }}: '{{ .Value }}'
-{{- end -}}
-
 global:
   scrape_interval: 10s
   scrape_timeout: 10s
@@ -37,38 +28,72 @@ scrape_configs:
     {{- end }}
 
     static_configs:
-    {{- if eq "service" (getv (printf "/stacks/%s/services/%s/kind" $stack_name $service)) }}
-      {{- range $container := lsdir (printf "/stacks/%s/services/%s/containers/" $stack_name $service) -}}
-        {{- $host_uuid := getv (printf "/containers/%s/host_uuid" $container) }}
-
-    - targets:
-      - '{{ $container }}.rancher.internal:{{ $port }}'
-        {{- if eq "cadvisor" (getv (printf "/stacks/%s/services/%s/labels/prometheus.metric_relabel_pattern" $stack_name $service)) }}
-      metric_relabel_configs:
-      - source_labels: ['container_label_io_rancher_project_service_name']
-        regex: '^(.+)/'
-        target_label: 'stack_name'
-        replacement: '$1'
-
-      - source_labels: ['container_label_io_rancher_project_service_name']
-        regex: '/(.+)$'
-        target_label: 'service_name'
-        replacement: '$1'
-
-      - source_labels: ['container_label_io_rancher_project_service_name']
-        regex: '/(.+)$'
-        target_label: 'container_id'
-        replacement: '$1'
-        {{- else }}
-      labels:
-        stack_name: '{{ $stack_name }}'
-        service_name: '{{ $service }}'
-        container_id: '{{ getv (printf "/containers/%s/external_id" $container) }}'
+      {{- if eq "service" (getv (printf "/stacks/%s/services/%s/kind" $stack_name $service)) }}
+        {{- range $container := lsdir (printf "/stacks/%s/services/%s/containers/" $stack_name $service) }}
+      - targets: ['{{ $container }}.rancher.internal:{{ $port }}']
+          {{- if not (exists (printf "/stacks/%s/services/%s/labels/prometheus.metric_relabel_pattern" $stack_name $service)) }}
+        labels:
+          stack_name: '{{ $stack_name }}'
+          service_name: '{{ $service }}'
+          container_name: '{{ $container }}'
+          container_id: '{{ getv (printf "/containers/%s/external_id" $container) }}'
+            {{- range $label := lsdir (printf "/stacks/%s/services/%s/labels/" $stack_name $service) -}}
+              {{- if eq (split $label "prometheus.label.").length 2 -}}
+              {{- $removed_prefix := replace $label "prometheus.label." "" -}}
+              {{- $removed_dots := replace $removed_prefix "." "_" -1 -}}
+              {{- $final_label := replace $removed_dots "-" "_" -1 }}
+          {{ $final_label }}: '{{ getv (printf "/stacks/%s/services/%s/labels/%s" .stack_name .service $label)}}'
+              {{- end -}}
+            {{- end -}}
+          {{- end }}
         {{- end }}
       {{- end }}
-    {{- end }}
+
+      {{- if eq "service" (getv (printf "/stacks/%s/services/%s/kind" $stack_name $service)) }}
+        {{- if exists (printf "/stacks/%s/services/%s/labels/prometheus.metric_relabel_pattern" $stack_name $service) }}
+          {{- if eq "cadvisor" (getv (printf "/stacks/%s/services/%s/labels/prometheus.metric_relabel_pattern" $stack_name $service)) }}
+    metric_relabel_configs:
+      - action: 'replace'
+        source_labels: ['container_label_io_rancher_project_name']
+        target_label: 'stack_name'
+
+      - action: 'replace'
+        source_labels: ['container_label_io_rancher_stack_service_name']
+        regex: '[a-zA-Z0-9_-]*/([a-zA-Z0-9_-]*)'
+        target_label: 'service_name'
+
+      - action: 'replace'
+        source_labels: ['id']
+        regex: '/docker/(.+)'
+        target_label: 'container_id'
+
+      - action: 'replace'
+        source_labels: ['id']
+        regex: '/docker/(.+)'
+        replacement: ''
+        target_label: 'id'
+
+      - action: 'replace'
+        source_labels: ['container_label_io_rancher_container_system']
+        target_label: 'system'
+
+      - action: 'labelmap'
+        regex: 'container_label_prometheus_label_(.+)'
+
+      - action: 'replace'
+        source_labels: ['image']
+        target_label: 'image_name'
+
+      - action: 'labeldrop'
+        regex: 'image'
+
+      - action: 'labeldrop'
+        regex: 'container_label_.*'
+          {{- end }}
+        {{- end }}
+      {{- end }}
 
 
-        {{- end -}}
+      {{- end -}}
     {{- end }}
   {{- end }}
