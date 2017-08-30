@@ -2,4 +2,4 @@
 src = "prometheus.yml.tmpl"
 dest = "/etc/prometheus/prometheus.yml"
 keys = ["/services", "/stacks", "/containers", "/hosts"]
-reload_cmd = "/usr/bin/curl --connect-timeout 5 --retry 5 --retry-max-time 40 -X POST http://prometheus:9090/-/reload"
+reload_cmd = "export HOSTS=$(dig +short prometheus | xargs echo -n | tr ' ' ,) && /usr/bin/curl --connect-timeout 5 --retry 5 --retry-max-time 40 -X POST http://{$HOSTS}:9090/-/reload"
