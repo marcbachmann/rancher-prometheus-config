@@ -73,6 +73,10 @@ scrape_configs:
         replacement: ''
         target_label: 'id'
 
+      - action: 'drop'
+        source_labels: ['id']
+        regex: '/(system|user|init).*'
+
       - action: 'replace'
         source_labels: ['container_label_io_rancher_container_system']
         target_label: 'system'
