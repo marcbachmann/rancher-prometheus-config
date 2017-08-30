@@ -141,7 +141,7 @@ scrape_configs:
         target_label: 'instance'
 
       - action: 'labeldrop'
-        regex: '(stack_name|service_name|container_.*|host_ip)'
+        regex: '(stack_name|service_name|container_.*|host_ip|host_label_io_rancher_.*)'
           {{- end -}}
         {{- end -}}
       {{- end -}}
