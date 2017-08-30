@@ -24,7 +24,10 @@ This is quite easy, you can add new exporters based on labels on services, just 
 - `prometheus.scrape_timeout`
 - `prometheus.label.foo`, to add a label `foo` to all metrics of that exporter
 
-- `prometheus.metric_relabel_pattern`, only supports `cadvisor` to add `service_stack` and `service_name` labels to its' metrics based on the rancher labels.
+- `prometheus.metric_relabel_pattern`, only supports `cadvisor` and `node`.
+  `cadvisor` adds `container_id`, `service_stack`, `service_name`, `instance` (host_ip) labels to it's metrics based on the rancher labels.
+
+  `node` adds `instance` (host ip), `host_labels_*`, `host_name` labels to all metrics
 
 ### What to do
 - Improve the relabeling of the node exporter. Add host labels onto node_last_seen or node_boot_time events
