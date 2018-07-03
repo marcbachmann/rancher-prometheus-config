@@ -1,4 +1,4 @@
-FROM alpine:3.3
+FROM alpine:3.6
 RUN apk add --update curl ca-certificates bind-tools \
     && curl -L -o /usr/bin/confd https://github.com/kelseyhightower/confd/releases/download/v0.12.0-alpha3/confd-0.12.0-alpha3-linux-amd64 \
     && chmod +x /usr/bin/confd
