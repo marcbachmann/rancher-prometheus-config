@@ -110,16 +110,6 @@ scrape_configs:
         target_label: 'container_id'
 
       - action: 'replace'
-        source_labels: ['id']
-        regex: '/docker/(.+)'
-        replacement: ''
-        target_label: 'id'
-
-      - action: 'drop'
-        source_labels: ['id']
-        regex: '/(system|user|init).*'
-
-      - action: 'replace'
         source_labels: ['container_label_io_rancher_container_system']
         target_label: 'system'
 
@@ -135,7 +125,9 @@ scrape_configs:
         target_label: 'container_name'
 
       - action: 'labeldrop'
-        regex: '(image|container_label_.*|name)'
+        regex: '(id|image|name|container_label_.*)'
+
+
 
           {{- else if eq "node" (getv (printf "/stacks/%s/services/%s/labels/prometheus.metric_relabel_pattern" $stack_name $service)) }}
 
