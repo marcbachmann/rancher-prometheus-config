@@ -51,6 +51,16 @@ scrape_configs:
 
       - targets: ['{{ $container }}.rancher.internal:{{ $port }}']
         labels:
+          {{- $host_uuid := getv (printf "/containers/%s/host_uuid" $container) -}}
+          {{- range $host_name := ls "/hosts/" -}}
+            {{- if eq $host_uuid (getv ( printf "/hosts/%s/uuid" . )) }}
+          instance: '{{ $host_name }}'
+          __host_ip: '{{ getv (printf "/hosts/%s/agent_ip" $host_name) }}'
+              {{- range gets (printf "/hosts/%s/labels/*" $host_name) }}
+          __host_label_{{ template "normkey" .Key }}: '{{ .Value }}'
+              {{- end -}}
+            {{- end -}}
+          {{- end -}}
           {{- range gets (printf "/stacks/%s/services/%s/labels/*" $stack_name $service) }}
           {{ template "promlabel" . }}
           {{- end -}}
@@ -58,16 +68,6 @@ scrape_configs:
           __service_name: '{{ $service }}'
           __container_name: '{{ $container }}'
           __container_id: '{{ getv (printf "/containers/%s/external_id" $container) }}'
-          {{- $host_uuid := getv (printf "/containers/%s/host_uuid" $container) -}}
-          {{- range $host_name := ls "/hosts/" -}}
-            {{- if eq $host_uuid (getv ( printf "/hosts/%s/uuid" . )) }}
-          __host_name: '{{ $host_name }}'
-          __host_ip: '{{ getv (printf "/hosts/%s/agent_ip" $host_name) }}'
-              {{- range gets (printf "/hosts/%s/labels/*" $host_name) }}
-          __host_label_{{ template "normkey" .Key }}: '{{ .Value }}'
-              {{- end -}}
-            {{- end -}}
-          {{- end -}}
 
         {{- end -}}
       {{- end -}}
@@ -75,10 +75,6 @@ scrape_configs:
       {{- if eq "service" (getv (printf "/stacks/%s/services/%s/kind" $stack_name $service)) -}}
         {{- if not (exists (printf "/stacks/%s/services/%s/labels/prometheus.metric_relabel_pattern" $stack_name $service)) }}
     relabel_configs:
-      - action: 'replace'
-        source_labels: ['__host_ip']
-        target_label: 'host_ip'
-
       - action: 'replace'
         source_labels: ['__container_id']
         target_label: 'container_id'
@@ -97,11 +93,6 @@ scrape_configs:
 
         {{- else -}}
           {{- if eq "cadvisor" (getv (printf "/stacks/%s/services/%s/labels/prometheus.metric_relabel_pattern" $stack_name $service)) }}
-
-    relabel_configs:
-      - action: 'replace'
-        source_labels: ['__host_ip']
-        target_label: 'instance'
 
     metric_relabel_configs:
       - action: 'replace'
@@ -151,10 +142,6 @@ scrape_configs:
     relabel_configs:
       - action: 'labelmap'
         regex: '__host_label_(.+)'
-
-      - action: 'replace'
-        source_labels: ['__host_ip']
-        target_label: 'instance'
 
       - action: 'labeldrop'
         regex: 'io_rancher_.*'
