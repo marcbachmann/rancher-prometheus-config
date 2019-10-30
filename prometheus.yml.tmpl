@@ -23,31 +23,73 @@ global:
 
 scrape_configs:
   {{- range $stack_name := ls "/stacks/" -}}
-    {{- range $service := ls (printf "/stacks/%s/services/" $stack_name) -}}
-      {{ if exists (printf "/stacks/%s/services/%s/labels/prometheus.port" $stack_name $service) -}}
-        {{- $port := getv (printf "/stacks/%s/services/%s/labels/prometheus.port" $stack_name $service) }}
+    {{- range $service_name := ls (printf "/stacks/%s/services/" $stack_name) -}}
+      {{- if eq "service" (getv (printf "/stacks/%s/services/%s/kind" $stack_name $service_name)) -}}
+      {{ if exists (printf "/stacks/%s/services/%s/labels/prometheus.port" $stack_name $service_name) -}}
 
-  {{- if exists (printf "/stacks/%s/services/%s/labels/prometheus.job_name" $stack_name $service) }}
-  - job_name: '{{ getv (printf "/stacks/%s/services/%s/labels/prometheus.job_name" $stack_name $service) }}'
-  {{- else }}
-  - job_name: '{{ $stack_name }}_{{ $service }}'
-  {{- end }}
+        {{- $port := getv (printf "/stacks/%s/services/%s/labels/prometheus.port" $stack_name $service_name) }}
 
-    {{- if exists (printf "/stacks/%s/services/%s/labels/prometheus.scrape_interval" $stack_name $service) }}
-    scrape_interval: '{{ getv (printf "/stacks/%s/services/%s/labels/prometheus.scrape_interval" $stack_name $service) }}'
-    {{- end }}
+  - job_name: '{{ getv (printf "/stacks/%s/services/%s/labels/prometheus.job_name" $stack_name $service_name) (printf "%s_%s" $stack_name $service_name) }}'
 
-    {{- if exists (printf "/stacks/%s/services/%s/labels/prometheus.scrape_timeout" $stack_name $service) }}
-    scrape_timeout: '{{ getv (printf "/stacks/%s/services/%s/labels/prometheus.scrape_timeout" $stack_name $service) }}'
-    {{- end }}
+    scrape_interval: '{{ getv (printf "/stacks/%s/services/%s/labels/prometheus.scrape_interval" $stack_name $service_name) "10s" }}'
+    scrape_timeout: '{{ getv (printf "/stacks/%s/services/%s/labels/prometheus.scrape_timeout" $stack_name $service_name) "10s" }}'
+    metrics_path: '{{ getv (printf "/stacks/%s/services/%s/labels/prometheus.metrics_path" $stack_name $service_name) "/metrics" }}'
 
-    {{- if exists (printf "/stacks/%s/services/%s/labels/prometheus.metrics_path" $stack_name $service) }}
-    metrics_path: '{{ getv (printf "/stacks/%s/services/%s/labels/prometheus.metrics_path" $stack_name $service) }}'
-    {{- end }}
+  {{ $metricRelabelPattern := getv (printf "/stacks/%s/services/%s/labels/prometheus.metric_relabel_pattern" $stack_name $service_name) "" }}
+
+  {{ if eq "blackbox" $metricRelabelPattern }}
+    static_configs:
+      {{- range $b_stack_name := ls "/stacks/" -}}
+      {{- range $b_service_name := ls (printf "/stacks/%s/services/" $b_stack_name) -}}
+        {{ if exists (printf "/stacks/%s/services/%s/labels/prometheus.blackbox.module" $b_stack_name $b_service_name) }}
+        {{ if exists (printf "/stacks/%s/services/%s/labels/prometheus.blackbox.target" $b_stack_name $b_service_name) }}
+          {{ $blackbox_container := index (lsdir (printf "/stacks/%s/services/%s/containers/" $stack_name $service_name)) 0 }}
+          {{ $blackbox_module := getv (printf "/stacks/%s/services/%s/labels/prometheus.blackbox.module" $b_stack_name $b_service_name) }}
+          {{ $blackbox_target := getv (printf "/stacks/%s/services/%s/labels/prometheus.blackbox.target" $b_stack_name $b_service_name) }}
+
+      - targets: ['{{ $blackbox_target }}']
+        labels:
+          __stack_name: '{{ $b_stack_name }}'
+          __service_name: '{{ $b_service_name }}'
+          __blackbox_container_address: '{{ $blackbox_container }}.rancher.internal:{{ $port }}'
+
+          module: {{ $blackbox_module }}
+          {{- $type := index (split $blackbox_module "_") 0 -}}
+          job: blackbox-{{ if eq "icmp" $type }}ping{{ else }}$type{{ end }}
+        {{- end -}}
+        {{- end -}}
+
+      {{- end -}}
+      {{- end }}
+
+    relabel_configs:
+      - source_labels: [module]
+        target_label: __param_module
+
+      - action: labeldrop
+        regex: 'module'
+
+      - source_labels: [__address__]
+        target_label: __param_target
+
+      - source_labels: [__param_target]
+        target_label: instance
+
+      - source_labels: [__blackbox_container_address]
+        target_label: __address__
+
+      - action: 'replace'
+        source_labels: ['__stack_name']
+        target_label: 'stack_name'
+
+      - action: 'replace'
+        source_labels: ['__service_name']
+        target_label: 'service_name'
+
+  {{ else }}
 
     static_configs:
-      {{- if eq "service" (getv (printf "/stacks/%s/services/%s/kind" $stack_name $service)) -}}
-        {{- range $container := lsdir (printf "/stacks/%s/services/%s/containers/" $stack_name $service) }}
+      {{- range $container := lsdir (printf "/stacks/%s/services/%s/containers/" $stack_name $service_name) }}
 
       - targets: ['{{ $container }}.rancher.internal:{{ $port }}']
         labels:
@@ -61,19 +103,18 @@ scrape_configs:
               {{- end -}}
             {{- end -}}
           {{- end -}}
-          {{- range gets (printf "/stacks/%s/services/%s/labels/*" $stack_name $service) }}
+          {{- range gets (printf "/stacks/%s/services/%s/labels/*" $stack_name $service_name) }}
           {{ template "promlabel" . }}
           {{- end -}}
           __stack_name: '{{ $stack_name }}'
-          __service_name: '{{ $service }}'
+          __service_name: '{{ $service_name }}'
           __container_name: '{{ $container }}'
           __container_id: '{{ getv (printf "/containers/%s/external_id" $container) }}'
 
-        {{- end -}}
       {{- end -}}
 
-      {{- if eq "service" (getv (printf "/stacks/%s/services/%s/kind" $stack_name $service)) -}}
-        {{- if not (exists (printf "/stacks/%s/services/%s/labels/prometheus.metric_relabel_pattern" $stack_name $service)) }}
+
+    {{- if eq "" $metricRelabelPattern }}
     relabel_configs:
       - action: 'replace'
         source_labels: ['__container_id']
@@ -91,8 +132,7 @@ scrape_configs:
         source_labels: ['__service_name']
         target_label: 'service_name'
 
-        {{- else -}}
-          {{- if eq "cadvisor" (getv (printf "/stacks/%s/services/%s/labels/prometheus.metric_relabel_pattern" $stack_name $service)) }}
+    {{- else if eq "cadvisor" $metricRelabelPattern }}
 
     metric_relabel_configs:
       - action: 'replace'
@@ -128,8 +168,7 @@ scrape_configs:
         regex: '(id|image|name|container_label_.*)'
 
 
-
-          {{- else if eq "node" (getv (printf "/stacks/%s/services/%s/labels/prometheus.metric_relabel_pattern" $stack_name $service)) }}
+    {{- else if eq "node" $metricRelabelPattern }}
 
     relabel_configs:
       - action: 'labelmap'
@@ -138,7 +177,7 @@ scrape_configs:
       - action: 'labeldrop'
         regex: 'io_rancher_.*'
 
-          {{- else if eq "rancher" (getv (printf "/stacks/%s/services/%s/labels/prometheus.metric_relabel_pattern" $stack_name $service)) }}
+    {{- else if eq "rancher" $metricRelabelPattern }}
 
     metric_relabel_configs:
       - action: 'replace'
@@ -169,13 +208,8 @@ scrape_configs:
         regex: '(rancher_stack_health_status|rancher_service_health_status|rancher_service_scale|rancher_service_state)'
         replacement: ''
         target_label: 'name'
-
-          {{- end -}}
-
-        {{- end -}}
-      {{- end -}}
-
-
-      {{- end -}}
     {{- end -}}
-  {{- end }}
+
+  {{ end -}}
+
+  {{ end }}{{ end }}{{ end }}{{ end }}

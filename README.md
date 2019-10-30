@@ -4,6 +4,11 @@ A prometheus confd setup that automatically extracts all metrics of containers u
 
 Just launch a new Stack in rancher.
 
+### Build
+```
+docker build -t marcbachmann/rancher-prometheus-config:1.0.2 .
+```
+
 ### Usage
 
   1. Run container as sidekick in rancher
@@ -24,7 +29,7 @@ This is quite easy, you can add new exporters based on labels on services, just 
 - `prometheus.scrape_timeout`
 - `prometheus.label.foo`, to add a label `foo` to all metrics of that exporter
 
-- `prometheus.metric_relabel_pattern`, only supports `cadvisor` and `node`.
+- `prometheus.metric_relabel_pattern`, only supports `cadvisor` and `node` and `blackbox`.
   `cadvisor` adds `container_id`, `service_stack`, `service_name`, `instance` (host_ip) labels to it's metrics based on the rancher labels.
 
   `node` adds `instance` (host ip), `host_labels_*`, `host_name` labels to all metrics
