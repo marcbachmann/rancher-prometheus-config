@@ -6,7 +6,7 @@ Just launch a new Stack in rancher.
 
 ### Build
 ```
-docker build -t marcbachmann/rancher-prometheus-config:1.0.2 .
+docker build -t marcbachmann/rancher-prometheus-config:1.0.3 .
 ```
 
 ### Usage

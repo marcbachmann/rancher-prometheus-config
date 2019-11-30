@@ -34,6 +34,10 @@ scrape_configs:
     scrape_interval: '{{ getv (printf "/stacks/%s/services/%s/labels/prometheus.scrape_interval" $stack_name $service_name) "10s" }}'
     scrape_timeout: '{{ getv (printf "/stacks/%s/services/%s/labels/prometheus.scrape_timeout" $stack_name $service_name) "10s" }}'
     metrics_path: '{{ getv (printf "/stacks/%s/services/%s/labels/prometheus.metrics_path" $stack_name $service_name) "/metrics" }}'
+    {{ $bearertoken := getv (printf "/stacks/%s/services/%s/labels/prometheus.bearer_token" $stack_name $service_name) "" }}
+    {{ if ne "" $bearertoken }}
+    bearer_token: '{{ $bearertoken }}'
+    {{ end }}
 
   {{ $metricRelabelPattern := getv (printf "/stacks/%s/services/%s/labels/prometheus.metric_relabel_pattern" $stack_name $service_name) "" }}
 
@@ -41,21 +45,22 @@ scrape_configs:
     static_configs:
       {{- range $b_stack_name := ls "/stacks/" -}}
       {{- range $b_service_name := ls (printf "/stacks/%s/services/" $b_stack_name) -}}
-        {{ if exists (printf "/stacks/%s/services/%s/labels/prometheus.blackbox.module" $b_stack_name $b_service_name) }}
-        {{ if exists (printf "/stacks/%s/services/%s/labels/prometheus.blackbox.target" $b_stack_name $b_service_name) }}
-          {{ $blackbox_container := index (lsdir (printf "/stacks/%s/services/%s/containers/" $stack_name $service_name)) 0 }}
-          {{ $blackbox_module := getv (printf "/stacks/%s/services/%s/labels/prometheus.blackbox.module" $b_stack_name $b_service_name) }}
-          {{ $blackbox_target := getv (printf "/stacks/%s/services/%s/labels/prometheus.blackbox.target" $b_stack_name $b_service_name) }}
+        {{ $blackbox_module := getv (printf "/stacks/%s/services/%s/labels/prometheus.blackbox.module" $b_stack_name $b_service_name) "" }}
+        {{ $blackbox_target := getv (printf "/stacks/%s/services/%s/labels/prometheus.blackbox.target" $b_stack_name $b_service_name) "" }}
+
+        {{ if ne "" $blackbox_module }}
+        {{ if ne "" $blackbox_target }}
 
       - targets: ['{{ $blackbox_target }}']
         labels:
           __stack_name: '{{ $b_stack_name }}'
           __service_name: '{{ $b_service_name }}'
+          {{ $blackbox_container := index (lsdir (printf "/stacks/%s/services/%s/containers/" $stack_name $service_name)) 0 }}
           __blackbox_container_address: '{{ $blackbox_container }}.rancher.internal:{{ $port }}'
 
-          module: {{ $blackbox_module }}
-          {{- $type := index (split $blackbox_module "_") 0 -}}
-          job: blackbox-{{ if eq "icmp" $type }}ping{{ else }}$type{{ end }}
+          module: '{{ $blackbox_module }}'
+          {{ $type := index (split $blackbox_module "_") 0 }}
+          job: 'blackbox-{{ $type }}'
         {{- end -}}
         {{- end -}}
 
